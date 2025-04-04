@@ -16,13 +16,14 @@ class ExamProctorApp:
         self.is_monitoring = False
         self.violation_count = 0
         self.last_face_time = time.time()
+        self.last_no_face_alert_time = 0  # Track last no-face alert
         self.current_frame = None
-        self.debug_mode = True  # Set to False for production
+        self.debug_mode = True
         
         # Create GUI
         self.create_widgets()
         
-        # Camera setup with multiple backend attempts
+        # Camera setup
         self.cap = None
         self.reinitialize_camera()
         
@@ -146,19 +147,24 @@ class ExamProctorApp:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
         
+        current_time = time.time()
+        
         # No face detected
         if len(faces) == 0:
-            no_face_time = time.time() - self.last_face_time
-            if no_face_time > 3:  # 3 seconds threshold
-                cv2.putText(frame, "VIOLATION: No face detected!", (10, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                self.record_violation("No face detected")
+            no_face_time = current_time - self.last_face_time
+            if no_face_time > 3:  # 3 seconds threshold before warning
+                # Only trigger violation if 5 seconds have passed since last alert
+                if current_time - self.last_no_face_alert_time >= 5:
+                    cv2.putText(frame, "VIOLATION: No face detected!", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    self.record_violation("No face detected")
+                    self.last_no_face_alert_time = current_time
         else:
-            self.last_face_time = time.time()
+            self.last_face_time = current_time
             for (x, y, w, h) in faces:
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
             
-            # Multiple faces detected
+            # Multiple faces detected (no cooldown for this violation)
             if len(faces) > 1:
                 cv2.putText(frame, "VIOLATION: Multiple people!", (10, 60), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
